@@ -41,8 +41,8 @@ class Tests(Scale):
             channels = []
 
             channels.append(await ctx.guild.create_text_channel("_test_text"))
-            channels.append(await ctx.guild.create_stage_channel("_testtest_stage"))
-            channels.append(await ctx.guild.create_voice_channel("_testtest_voice"))
+            channels.append(await ctx.guild.create_stage_channel("_test_stage"))
+            channels.append(await ctx.guild.create_voice_channel("_test_voice"))
 
             for channel in channels:
                 self.ensure_attributes(channel)
