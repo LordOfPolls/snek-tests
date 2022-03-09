@@ -56,6 +56,10 @@ class Tests(Scale):
                     await thread.delete()
                 await channel.delete()
             await category.delete()
+
+            dm_channel = await self.bot.owner.fetch_dm()
+            assert dm_channel == self.bot.owner.get_dm()
+
         finally:
             for channel in ctx.guild.channels:
                 if channel.name.startswith("_test"):
