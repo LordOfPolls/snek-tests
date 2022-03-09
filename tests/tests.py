@@ -18,7 +18,7 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message,
+    Message, EmbedField, EmbedAuthor, EmbedAttachment,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -220,26 +220,33 @@ class Tests(Scale):
         thread = await msg.create_thread("Test Thread")
 
         try:
+            e = Embed("Test")
+            await thread.send(embeds=e)
+
             e = Embed(
                 "Test",
                 "Test",
                 BrandColors.RED,
                 "https://github.com/",
-                Timestamp.fromdatetime(datetime.now()),
+                datetime.now(),
+                [EmbedField("name", "value"), EmbedField("name2", "value2"), EmbedField("name3", "value3")],
+                EmbedAuthor(self.bot.user.display_name, self.bot.user.avatar.url),
+                EmbedAttachment(self.bot.user.avatar.url),
+                EmbedAttachment(self.bot.owner.avatar.url),
                 footer=EmbedFooter("Test", icon_url=self.bot.user.avatar.url),
             )
-            e.set_image(self.bot.user.avatar.url)
-            e.set_thumbnail(self.bot.user.avatar.url)
-            e.set_author("Test", self.bot.user.avatar.url)
             await thread.send(embeds=e)
 
             e = Embed("Test")
             e.color = BrandColors.RED
             e.url = "https://github.com/"
-            e.timestamp = Timestamp.fromdatetime(datetime.now())
+            e.timestamp = datetime.now()
+            e.set_image(self.bot.user.avatar.url)
+            e.set_thumbnail(self.bot.user.avatar.url)
+            e.set_author("Test", self.bot.owner.avatar.url)
             e.set_footer("Test")
             e.add_field("test", "test")
-
+            e.add_field("test2", "test2")
             await thread.send(embeds=e)
 
             await thread.delete()
