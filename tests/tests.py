@@ -54,6 +54,11 @@ class Tests(Scale):
                         "test_thread", ChannelTypes.GUILD_PUBLIC_THREAD
                     )
                     await thread.send("test")
+
+                    assert not thread.archived
+                    await thread.archive()
+                    assert thread.archived
+
                     await thread.delete()
                 await channel.delete()
             await category.delete()
