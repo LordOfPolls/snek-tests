@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import suppress
 from datetime import datetime
 
 import dis_snek
@@ -37,34 +39,57 @@ class Tests(Scale):
 
     async def test_channels(self, ctx: MessageContext, msg):
         try:
-            category = await ctx.guild.create_category("test_category")
-            channels = []
+            category = await ctx.guild.create_category("_test_category")
+            channels = [
+                guild_text := await ctx.guild.create_text_channel("_test_text"),
+                guild_news := await ctx.guild.create_news_channel("_test_news"),
+                guild_stage := await ctx.guild.create_stage_channel("_test_stage"),
+                guild_voice := await ctx.guild.create_voice_channel("_test_voice"),
+            ]
+            assert all(c in ctx.guild.channels for c in channels)
+            assert category in ctx.guild.channels
 
-            channels.append(await ctx.guild.create_text_channel("_test_text"))
-            channels.append(await ctx.guild.create_stage_channel("_test_stage"))
-            channels.append(await ctx.guild.create_voice_channel("_test_voice"))
-
+            # category
             for channel in channels:
                 self.ensure_attributes(channel)
                 await channel.edit(parent_id=category.id)
-                if isinstance(channel, MessageableMixin):
-                    await channel.send("test")
-                if isinstance(channel, ThreadableMixin):
-                    thread = await channel.create_thread_without_message(
-                        "test_thread", ChannelTypes.GUILD_PUBLIC_THREAD
-                    )
-                    await thread.send("test")
+                assert channel.category == category
 
-                    assert not thread.archived
-                    await thread.archive()
-                    assert thread.archived
+            # text
+            _m = await guild_text.send("test")
+            assert _m.channel == guild_text
 
-                    await thread.delete()
+            # thread
+            m_thread = await guild_text.create_thread_with_message("new message thread", _m)
+            assert _m.id == m_thread.id
+
+            thread = await guild_text.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+            assert thread.parent_channel == guild_text
+            _m = await thread.send("test")
+            assert _m.channel == thread
+
+            assert m_thread in ctx.guild.threads
+            assert thread in ctx.guild.threads
+            await thread.delete()
+            # We suppress bcu sometimes event fires too fast, before wait_for is called
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("thread_delete", timeout=2)
+            assert thread not in ctx.guild.threads
+
+            # news
+            _m = await guild_news.send("test")
+            await _m.publish()
+
+            # delete
+            for channel in channels:
                 await channel.delete()
             await category.delete()
+            assert all(c not in ctx.guild.channels for c in channels)
+            assert category not in ctx.guild.channels
 
-            dm_channel = await self.bot.owner.fetch_dm()
-            assert dm_channel == self.bot.owner.get_dm()
+            # dm
+            dm = await self.bot.owner.fetch_dm()
+            assert dm == self.bot.owner.get_dm()
 
         finally:
             for channel in ctx.guild.channels:
