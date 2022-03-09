@@ -285,6 +285,7 @@ class Tests(Scale):
 
     async def test_webhooks(self, ctx: MessageContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
+        test_thread = await test_channel.create_thread_without_message("Test Thread", ChannelTypes.GUILD_PUBLIC_THREAD)
 
         try:
             hook = await test_channel.create_webhook("Test")
@@ -300,6 +301,8 @@ class Tests(Scale):
             assert _m.webhook_id == hook.id
             await hook.send("Test", username="Different Name", wait=True)
             await hook.send("Test", avatar_url=self.bot.user.avatar.url, wait=True)
+            _m = await hook.send("Test", thread=test_thread, wait=True)
+            assert _m.channel == test_thread
 
             await hook.delete()
         finally:
