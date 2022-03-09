@@ -18,6 +18,7 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
+    Message,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -293,7 +294,10 @@ class Tests(Scale):
             hook = await test_channel.create_webhook(
                 "Test-Avatar", r"tests/LordOfPolls.png"
             )
-            await hook.send("Test", wait=True)
+
+            _m = await hook.send("Test", wait=True)
+            assert isinstance(_m, Message)
+            assert _m.webhook_id == hook.id
             await hook.send("Test", username="Different Name", wait=True)
             await hook.send("Test", avatar_url=self.bot.user.avatar.url, wait=True)
 
