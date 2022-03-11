@@ -103,17 +103,20 @@ class Tests(Scale):
             await _m.edit("Test Edit")
             assert _m.content == "Test Edit"
             await _m.add_reaction("❌")
-            await self.bot.wait_for("message_reaction_add", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_add", timeout=2)
 
             assert len(_m.reactions) == 1
 
             assert len(await _m.fetch_reaction("❌")) != 0
             await _m.remove_reaction("❌")
-            await self.bot.wait_for("message_reaction_remove", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_remove", timeout=2)
 
             await _m.add_reaction("❌")
             await _m.clear_all_reactions()
-            await self.bot.wait_for("message_reaction_remove_all", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_remove_all", timeout=2)
 
             assert len(_m.reactions) == 0
 
