@@ -20,7 +20,7 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message, EmbedField, EmbedAuthor, EmbedAttachment,
+    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -39,57 +39,53 @@ class Tests(Scale):
 
     async def test_channels(self, ctx: MessageContext, msg):
         try:
-            category = await ctx.guild.create_category("_test_category")
             channels = [
+                guild_category := await ctx.guild.create_category("_test_category"),
                 guild_text := await ctx.guild.create_text_channel("_test_text"),
                 guild_news := await ctx.guild.create_news_channel("_test_news"),
                 guild_stage := await ctx.guild.create_stage_channel("_test_stage"),
                 guild_voice := await ctx.guild.create_voice_channel("_test_voice"),
             ]
             assert all(c in ctx.guild.channels for c in channels)
-            assert category in ctx.guild.channels
 
-            # category
+            channels.append(dm := await self.bot.owner.fetch_dm())
+
             for channel in channels:
                 self.ensure_attributes(channel)
-                await channel.edit(parent_id=category.id)
-                assert channel.category == category
 
-            # text
-            _m = await guild_text.send("test")
-            assert _m.channel == guild_text
+                if isinstance(channel, GuildChannel) and channel != guild_category:
+                    await channel.edit(parent_id=guild_category.id)
+                    assert channel.category == guild_category
 
-            # thread
-            m_thread = await guild_text.create_thread_with_message("new message thread", _m)
-            assert _m.id == m_thread.id
+                if isinstance(channel, MessageableMixin):
+                    _m = await channel.send("test")
+                    assert _m.channel == channel
 
-            thread = await guild_text.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
-            assert thread.parent_channel == guild_text
-            _m = await thread.send("test")
-            assert _m.channel == thread
+                    if isinstance(channel, GuildNews):
+                        await _m.publish()
 
-            assert m_thread in ctx.guild.threads
-            assert thread in ctx.guild.threads
-            await thread.delete()
-            # We suppress bcu sometimes event fires too fast, before wait_for is called
-            with suppress(asyncio.exceptions.TimeoutError):
-                await self.bot.wait_for("thread_delete", timeout=2)
-            assert thread not in ctx.guild.threads
+                    await _m.delete()
 
-            # news
-            _m = await guild_news.send("test")
-            await _m.publish()
+                if isinstance(channel, ThreadableMixin):
+                    thread = await channel.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+                    assert thread.parent_channel == channel
+                    _m = await thread.send("test")
+                    assert _m.channel == thread
 
-            # delete
+                    _m = await channel.send("start thread here")
+                    m_thread = await channel.create_thread_with_message("new message thread", _m)
+                    assert _m.id == m_thread.id
+
+                    assert m_thread in ctx.guild.threads
+                    assert thread in ctx.guild.threads
+                    await thread.delete()
+                    # We suppress bcu sometimes event fires too fast, before wait_for is called
+                    with suppress(asyncio.exceptions.TimeoutError):
+                        await self.bot.wait_for("thread_delete", timeout=2)
+                    assert thread not in ctx.guild.threads
+
             for channel in channels:
                 await channel.delete()
-            await category.delete()
-            assert all(c not in ctx.guild.channels for c in channels)
-            assert category not in ctx.guild.channels
-
-            # dm
-            dm = await self.bot.owner.fetch_dm()
-            assert dm == self.bot.owner.get_dm()
 
         finally:
             for channel in ctx.guild.channels:
