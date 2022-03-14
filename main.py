@@ -1,9 +1,12 @@
 import asyncio
 import inspect
 import logging
+import os
 import traceback
 from pathlib import Path
 from time import perf_counter
+
+from dotenv import load_dotenv
 
 import dis_snek
 from dis_snek import (
@@ -12,6 +15,8 @@ from dis_snek import (
     listen,
     CMD_BODY,
 )
+
+load_dotenv()
 
 logging.basicConfig(
     format="[%(filename)s:%(lineno)d] %(levelname)s - %(message)s",
@@ -88,4 +93,4 @@ class Bot(dis_snek.Snake):
         self.available.set()
 
 
-Bot().start((Path(__file__).parent / "token.txt").read_text().strip())
+Bot().start(os.environ.get("TOKEN"))

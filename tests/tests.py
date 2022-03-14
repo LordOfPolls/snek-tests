@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import dis_snek
@@ -156,7 +157,7 @@ class Tests(Scale):
                     await role.delete()
 
     async def test_members(self, ctx: MessageContext, msg):
-        for member in [ctx.guild.me, ctx.guild.get_member(194737590593781761)]:
+        for member in [ctx.guild.me, ctx.guild.get_member(os.environ.get("MEMBER"))]:
             self.ensure_attributes(member)
 
             await member.edit_nickname("Test Nickname")
