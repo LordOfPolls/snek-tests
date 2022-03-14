@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import suppress
 import os
 from datetime import datetime
 
@@ -19,6 +21,7 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
+    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -37,26 +40,54 @@ class Tests(Scale):
 
     async def test_channels(self, ctx: MessageContext, msg):
         try:
-            category = await ctx.guild.create_category("test_category")
-            channels = []
+            channels = [
+                guild_category := await ctx.guild.create_category("_test_category"),
+                guild_text := await ctx.guild.create_text_channel("_test_text"),
+                guild_news := await ctx.guild.create_news_channel("_test_news"),
+                guild_stage := await ctx.guild.create_stage_channel("_test_stage"),
+                guild_voice := await ctx.guild.create_voice_channel("_test_voice"),
+            ]
+            assert all(c in ctx.guild.channels for c in channels)
 
-            channels.append(await ctx.guild.create_text_channel("_test_text"))
-            channels.append(await ctx.guild.create_stage_channel("_testtest_stage"))
-            channels.append(await ctx.guild.create_voice_channel("_testtest_voice"))
+            channels.append(dm := await self.bot.owner.fetch_dm())
 
             for channel in channels:
                 self.ensure_attributes(channel)
-                await channel.edit(parent_id=category.id)
+
+                if isinstance(channel, GuildChannel) and channel != guild_category:
+                    await channel.edit(parent_id=guild_category.id)
+                    assert channel.category == guild_category
+
                 if isinstance(channel, MessageableMixin):
-                    await channel.send("test")
+                    _m = await channel.send("test")
+                    assert _m.channel == channel
+
+                    if isinstance(channel, GuildNews):
+                        await _m.publish()
+
+                    await _m.delete()
+
                 if isinstance(channel, ThreadableMixin):
-                    thread = await channel.create_thread_without_message(
-                        "test_thread", ChannelTypes.GUILD_PUBLIC_THREAD
-                    )
-                    await thread.send("test")
+                    thread = await channel.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+                    assert thread.parent_channel == channel
+                    _m = await thread.send("test")
+                    assert _m.channel == thread
+
+                    _m = await channel.send("start thread here")
+                    m_thread = await channel.create_thread_with_message("new message thread", _m)
+                    assert _m.id == m_thread.id
+
+                    assert m_thread in ctx.guild.threads
+                    assert thread in ctx.guild.threads
                     await thread.delete()
+                    # We suppress bcu sometimes event fires too fast, before wait_for is called
+                    with suppress(asyncio.exceptions.TimeoutError):
+                        await self.bot.wait_for("thread_delete", timeout=2)
+                    assert thread not in ctx.guild.threads
+
+            for channel in channels:
                 await channel.delete()
-            await category.delete()
+
         finally:
             for channel in ctx.guild.channels:
                 if channel.name.startswith("_test"):
@@ -73,17 +104,20 @@ class Tests(Scale):
             await _m.edit("Test Edit")
             assert _m.content == "Test Edit"
             await _m.add_reaction("❌")
-            await self.bot.wait_for("message_reaction_add", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_add", timeout=2)
 
             assert len(_m.reactions) == 1
 
             assert len(await _m.fetch_reaction("❌")) != 0
             await _m.remove_reaction("❌")
-            await self.bot.wait_for("message_reaction_remove", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_remove", timeout=2)
 
             await _m.add_reaction("❌")
             await _m.clear_all_reactions()
-            await self.bot.wait_for("message_reaction_remove_all", timeout=2)
+            with suppress(asyncio.exceptions.TimeoutError):
+                await self.bot.wait_for("message_reaction_remove_all", timeout=2)
 
             assert len(_m.reactions) == 0
 
@@ -211,26 +245,33 @@ class Tests(Scale):
         thread = await msg.create_thread("Test Thread")
 
         try:
+            e = Embed("Test")
+            await thread.send(embeds=e)
+
             e = Embed(
                 "Test",
                 "Test",
                 BrandColors.RED,
                 "https://github.com/",
-                Timestamp.fromdatetime(datetime.now()),
+                datetime.now(),
+                [EmbedField("name", "value"), EmbedField("name2", "value2"), EmbedField("name3", "value3")],
+                EmbedAuthor(self.bot.user.display_name, self.bot.user.avatar.url),
+                EmbedAttachment(self.bot.user.avatar.url),
+                EmbedAttachment(self.bot.owner.avatar.url),
                 footer=EmbedFooter("Test", icon_url=self.bot.user.avatar.url),
             )
-            e.set_image(self.bot.user.avatar.url)
-            e.set_thumbnail(self.bot.user.avatar.url)
-            e.set_author("Test", self.bot.user.avatar.url)
             await thread.send(embeds=e)
 
             e = Embed("Test")
             e.color = BrandColors.RED
             e.url = "https://github.com/"
-            e.timestamp = Timestamp.fromdatetime(datetime.now())
+            e.timestamp = datetime.now()
+            e.set_image(self.bot.user.avatar.url)
+            e.set_thumbnail(self.bot.user.avatar.url)
+            e.set_author("Test", self.bot.owner.avatar.url)
             e.set_footer("Test")
             e.add_field("test", "test")
-
+            e.add_field("test2", "test2")
             await thread.send(embeds=e)
 
             await thread.delete()
@@ -281,6 +322,7 @@ class Tests(Scale):
 
     async def test_webhooks(self, ctx: MessageContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
+        test_thread = await test_channel.create_thread_without_message("Test Thread", ChannelTypes.GUILD_PUBLIC_THREAD)
 
         try:
             hook = await test_channel.create_webhook("Test")
@@ -290,9 +332,14 @@ class Tests(Scale):
             hook = await test_channel.create_webhook(
                 "Test-Avatar", r"tests/LordOfPolls.png"
             )
-            await hook.send("Test", wait=True)
+
+            _m = await hook.send("Test", wait=True)
+            assert isinstance(_m, Message)
+            assert _m.webhook_id == hook.id
             await hook.send("Test", username="Different Name", wait=True)
             await hook.send("Test", avatar_url=self.bot.user.avatar.url, wait=True)
+            _m = await hook.send("Test", thread=test_thread, wait=True)
+            assert _m.channel == test_thread
 
             await hook.delete()
         finally:
