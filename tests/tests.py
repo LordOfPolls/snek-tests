@@ -1,6 +1,6 @@
 import asyncio
-from contextlib import suppress
 import os
+from contextlib import suppress
 from datetime import datetime
 
 import dis_snek
@@ -13,7 +13,6 @@ from dis_snek import (
     Embed,
     Status,
     process_emoji_req_format,
-    Timestamp,
     EmbedFooter,
     SelectOption,
     Modal,
@@ -21,7 +20,14 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel, MessageFlags, GuildText,
+    Message,
+    EmbedField,
+    EmbedAuthor,
+    EmbedAttachment,
+    GuildNews,
+    GuildChannel,
+    MessageFlags,
+    GuildText,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
