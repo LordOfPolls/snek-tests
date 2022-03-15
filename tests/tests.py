@@ -107,7 +107,7 @@ class Tests(Scale):
                 if channel.name.startswith("_test"):
                     await channel.delete()
 
-    async def test_messages(self, ctx: MessageContext, msg):
+    async def test_messages(self, ctx: MessageContext, msg: Message):
         thread = await msg.create_thread("Test Thread")
 
         try:
@@ -150,8 +150,8 @@ class Tests(Scale):
                 mem_mentions.append(member)
             assert len(mem_mentions) == 2
 
-            # todo: known bug, see #324
-            # assert len(_r.mention_channels) == 1
+            assert len(_r.mention_channels) == 1
+            assert _r.mention_channels[0].id == ctx.channel.id
 
             await thread.send(file=r"tests/LordOfPolls.png")
 
