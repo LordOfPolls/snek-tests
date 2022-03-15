@@ -70,22 +70,39 @@ class Tests(Scale):
                     await _m.delete()
 
                 if isinstance(channel, ThreadableMixin):
-                    thread = await channel.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
-                    assert thread.parent_channel == channel
-                    _m = await thread.send("test")
-                    assert _m.channel == thread
-
                     _m = await channel.send("start thread here")
-                    m_thread = await channel.create_thread_with_message("new message thread", _m)
-                    assert _m.id == m_thread.id
-
+                    m_thread = await channel.create_thread("new message thread", _m)
                     assert m_thread in ctx.guild.threads
-                    assert thread in ctx.guild.threads
-                    await thread.delete()
+                    assert m_thread.parent_channel == channel
+                    assert m_thread.id == _m.id
+
+                    await m_thread.delete()
                     # We suppress bcu sometimes event fires too fast, before wait_for is called
                     with suppress(asyncio.exceptions.TimeoutError):
                         await self.bot.wait_for("thread_delete", timeout=2)
-                    assert thread not in ctx.guild.threads
+                    assert m_thread not in ctx.guild.threads
+
+                    try:
+                        thread = await channel.create_thread("new thread", thread_type=ChannelTypes.GUILD_PUBLIC_THREAD)
+                        assert thread in ctx.guild.threads
+                        assert thread.parent_channel == channel
+                        _m = await thread.send("test")
+                        assert _m.channel == thread
+                    except ValueError:
+                        # Some channels cannot create thread without message (ie GuildNews)
+                        pass
+
+                    try:
+                        p_thread = await channel.create_thread(
+                            "new private thread", thread_type=ChannelTypes.GUILD_PRIVATE_THREAD, invitable=False
+                        )
+                        assert p_thread in ctx.guild.threads
+                        assert p_thread.is_private
+                        assert not p_thread.invitable
+                    except (ValueError, dis_snek.errors.HTTPException):
+                        # Some channels cannot create thread without message (ie GuildNews)
+                        # this was run in a server without boosts
+                        pass
 
                 if isinstance(channel, GuildText):
                     channel = await channel.edit(channel_type=ChannelTypes.GUILD_NEWS)
