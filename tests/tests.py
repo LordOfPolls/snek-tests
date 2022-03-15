@@ -21,7 +21,7 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel,
+    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel, MessageFlags, GuildText,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -61,10 +61,6 @@ class Tests(Scale):
                 if isinstance(channel, MessageableMixin):
                     _m = await channel.send("test")
                     assert _m.channel == channel
-
-                    if isinstance(channel, GuildNews):
-                        await _m.publish()
-
                     await _m.delete()
 
                 if isinstance(channel, ThreadableMixin):
@@ -84,6 +80,18 @@ class Tests(Scale):
                     with suppress(asyncio.exceptions.TimeoutError):
                         await self.bot.wait_for("thread_delete", timeout=2)
                     assert thread not in ctx.guild.threads
+
+                if isinstance(channel, GuildText):
+                    channel = await channel.edit(channel_type=ChannelTypes.GUILD_NEWS)
+                    assert channel.type == ChannelTypes.GUILD_NEWS
+                    assert isinstance(channel, GuildNews)
+
+                if isinstance(channel, GuildNews):
+                    _m = await channel.send("crosspost this")
+                    await _m.publish()
+                    with suppress(asyncio.exceptions.TimeoutError):
+                        await self.bot.wait_for("message_update", timeout=2)
+                    assert MessageFlags.CROSSPOSTED in _m.flags
 
             for channel in channels:
                 await channel.delete()
