@@ -75,6 +75,7 @@ class Tests(Scale):
                     assert m_thread in ctx.guild.threads
                     assert m_thread.parent_channel == channel
                     assert m_thread.id == _m.id
+                    assert MessageFlags.HAS_THREAD in _m.flags
 
                     await m_thread.delete()
                     # We suppress bcu sometimes event fires too fast, before wait_for is called
