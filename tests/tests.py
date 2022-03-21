@@ -354,7 +354,7 @@ class Tests(Scale):
 
     async def test_webhooks(self, ctx: MessageContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
-        test_thread = await test_channel.create_thread_without_message("Test Thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+        test_thread = await test_channel.create_thread("Test Thread", thread_type=ChannelTypes.GUILD_PUBLIC_THREAD)
 
         try:
             hook = await test_channel.create_webhook("Test")
