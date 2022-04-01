@@ -1,6 +1,6 @@
 import asyncio
-from contextlib import suppress
 import os
+from contextlib import suppress
 from datetime import datetime
 
 import dis_snek
@@ -13,7 +13,6 @@ from dis_snek import (
     Embed,
     Status,
     process_emoji_req_format,
-    Timestamp,
     EmbedFooter,
     SelectOption,
     Modal,
@@ -21,7 +20,14 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel,
+    Message,
+    EmbedField,
+    EmbedAuthor,
+    EmbedAttachment,
+    GuildNews,
+    GuildChannel,
+    MessageFlags,
+    GuildText,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -61,29 +67,55 @@ class Tests(Scale):
                 if isinstance(channel, MessageableMixin):
                     _m = await channel.send("test")
                     assert _m.channel == channel
-
-                    if isinstance(channel, GuildNews):
-                        await _m.publish()
-
                     await _m.delete()
 
                 if isinstance(channel, ThreadableMixin):
-                    thread = await channel.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
-                    assert thread.parent_channel == channel
-                    _m = await thread.send("test")
-                    assert _m.channel == thread
-
                     _m = await channel.send("start thread here")
-                    m_thread = await channel.create_thread_with_message("new message thread", _m)
-                    assert _m.id == m_thread.id
-
+                    m_thread = await channel.create_thread("new message thread", _m)
                     assert m_thread in ctx.guild.threads
-                    assert thread in ctx.guild.threads
-                    await thread.delete()
+                    assert m_thread.parent_channel == channel
+                    assert m_thread.id == _m.id
+                    assert MessageFlags.HAS_THREAD in _m.flags
+
+                    await m_thread.delete()
                     # We suppress bcu sometimes event fires too fast, before wait_for is called
                     with suppress(asyncio.exceptions.TimeoutError):
                         await self.bot.wait_for("thread_delete", timeout=2)
-                    assert thread not in ctx.guild.threads
+                    assert m_thread not in ctx.guild.threads
+
+                    try:
+                        thread = await channel.create_thread("new thread", thread_type=ChannelTypes.GUILD_PUBLIC_THREAD)
+                        assert thread in ctx.guild.threads
+                        assert thread.parent_channel == channel
+                        _m = await thread.send("test")
+                        assert _m.channel == thread
+                    except ValueError:
+                        # Some channels cannot create thread without message (ie GuildNews)
+                        pass
+
+                    try:
+                        p_thread = await channel.create_thread(
+                            "new private thread", thread_type=ChannelTypes.GUILD_PRIVATE_THREAD, invitable=False
+                        )
+                        assert p_thread in ctx.guild.threads
+                        assert p_thread.is_private
+                        assert not p_thread.invitable
+                    except (ValueError, dis_snek.errors.HTTPException):
+                        # Some channels cannot create thread without message (ie GuildNews)
+                        # this was run in a server without boosts
+                        pass
+
+                if isinstance(channel, GuildText):
+                    channel = await channel.edit(channel_type=ChannelTypes.GUILD_NEWS)
+                    assert channel.type == ChannelTypes.GUILD_NEWS
+                    assert isinstance(channel, GuildNews)
+
+                if isinstance(channel, GuildNews):
+                    _m = await channel.send("crosspost this")
+                    await _m.publish()
+                    with suppress(asyncio.exceptions.TimeoutError):
+                        await self.bot.wait_for("message_update", timeout=2)
+                    assert MessageFlags.CROSSPOSTED in _m.flags
 
             for channel in channels:
                 await channel.delete()
@@ -93,7 +125,7 @@ class Tests(Scale):
                 if channel.name.startswith("_test"):
                     await channel.delete()
 
-    async def test_messages(self, ctx: MessageContext, msg):
+    async def test_messages(self, ctx: MessageContext, msg: Message):
         thread = await msg.create_thread("Test Thread")
 
         try:
@@ -136,8 +168,8 @@ class Tests(Scale):
                 mem_mentions.append(member)
             assert len(mem_mentions) == 2
 
-            # todo: known bug, see #324
-            # assert len(_r.mention_channels) == 1
+            assert len(_r.mention_channels) == 1
+            assert _r.mention_channels[0].id == ctx.channel.id
 
             await thread.send(file=r"tests/LordOfPolls.png")
 
@@ -322,7 +354,7 @@ class Tests(Scale):
 
     async def test_webhooks(self, ctx: MessageContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
-        test_thread = await test_channel.create_thread_without_message("Test Thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+        test_thread = await test_channel.create_thread("Test Thread", thread_type=ChannelTypes.GUILD_PUBLIC_THREAD)
 
         try:
             hook = await test_channel.create_webhook("Test")
