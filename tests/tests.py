@@ -21,7 +21,13 @@ from dis_snek import (
     PartialEmoji,
     Scale,
     Permissions,
-    Message, EmbedField, EmbedAuthor, EmbedAttachment, GuildNews, InvitableMixin, GuildChannel,
+    Message,
+    EmbedField,
+    EmbedAuthor,
+    EmbedAttachment,
+    GuildNews,
+    InvitableMixin,
+    GuildChannel,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
@@ -68,13 +74,19 @@ class Tests(Scale):
                     await _m.delete()
 
                 if isinstance(channel, ThreadableMixin):
-                    thread = await channel.create_thread_without_message("new thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+                    if isinstance(channel, GuildNews):
+                        _tm = await channel.send("dummy message")
+                        thread = await _tm.create_thread("new thread")
+                    else:
+                        thread = await channel.create_thread("new thread")
                     assert thread.parent_channel == channel
                     _m = await thread.send("test")
                     assert _m.channel == thread
 
                     _m = await channel.send("start thread here")
-                    m_thread = await channel.create_thread_with_message("new message thread", _m)
+                    m_thread = await channel.create_thread(
+                        "new message thread", message=_m
+                    )
                     assert _m.id == m_thread.id
 
                     assert m_thread in ctx.guild.threads
@@ -254,7 +266,11 @@ class Tests(Scale):
                 BrandColors.RED,
                 "https://github.com/",
                 datetime.now(),
-                [EmbedField("name", "value"), EmbedField("name2", "value2"), EmbedField("name3", "value3")],
+                [
+                    EmbedField("name", "value"),
+                    EmbedField("name2", "value2"),
+                    EmbedField("name3", "value3"),
+                ],
                 EmbedAuthor(self.bot.user.display_name, self.bot.user.avatar.url),
                 EmbedAttachment(self.bot.user.avatar.url),
                 EmbedAttachment(self.bot.owner.avatar.url),
@@ -322,7 +338,7 @@ class Tests(Scale):
 
     async def test_webhooks(self, ctx: MessageContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
-        test_thread = await test_channel.create_thread_without_message("Test Thread", ChannelTypes.GUILD_PUBLIC_THREAD)
+        test_thread = await test_channel.create_thread("Test Thread")
 
         try:
             hook = await test_channel.create_webhook("Test")
