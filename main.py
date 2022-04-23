@@ -3,10 +3,8 @@ import inspect
 import logging
 import os
 import traceback
-from pathlib import Path
 from time import perf_counter
-
-from dotenv import load_dotenv
+from typing import Callable
 
 import dis_snek
 from dis_snek import (
@@ -15,6 +13,7 @@ from dis_snek import (
     listen,
     CMD_BODY,
 )
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -45,6 +44,18 @@ class Bot(dis_snek.Snake):
     async def on_ready(self):
         print(f"Logged in as {self.app.name}")
 
+    async def run_test(self, name: str, method: Callable, ctx: MessageContext):
+        test_title = f"{method.__name__.removeprefix('test_')} Tests".title()
+
+        msg = await ctx.send(f"<a:loading:950666903540625418> {test_title}: Running!")
+        try:
+            await method(ctx, msg)
+        except Exception as e:
+            trace = "\n".join(traceback.format_exception(e))
+            await msg.edit(f"❌ {test_title}: Failed \n```{trace}```")
+        else:
+            await msg.edit(f"✅ {test_title}: Completed")
+
     @dis_snek.message_command()
     async def begin(self, ctx: MessageContext, arg: CMD_BODY):
         if not self.available.is_set():
@@ -62,6 +73,8 @@ class Bot(dis_snek.Snake):
         source = await ctx.send(
             "<a:loading:950666903540625418> Running dis_snek test suite..."
         )
+
+        tasks = []
         s = perf_counter()
 
         methods = inspect.getmembers(self.scales["Tests"], inspect.ismethod)
@@ -71,18 +84,9 @@ class Bot(dis_snek.Snake):
                 if arg:
                     if arg.lower() not in name:
                         continue
-                test_title = f"{method.__name__.removeprefix('test_')} Tests".title()
+                tasks.append(asyncio.create_task(self.run_test(name, method, ctx)))
 
-                msg = await ctx.send(
-                    f"<a:loading:950666903540625418> {test_title}: Running!"
-                )
-                try:
-                    await method(ctx, msg)
-                except Exception as e:
-                    trace = "\n".join(traceback.format_exception(e))
-                    await msg.edit(f"❌ {test_title}: Failed \n```{trace}```")
-                else:
-                    await msg.edit(f"✅ {test_title}: Completed")
+        await asyncio.gather(*tasks)
 
         dur = perf_counter() - s
 
