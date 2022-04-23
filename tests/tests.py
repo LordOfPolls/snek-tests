@@ -148,8 +148,7 @@ class Tests(Scale):
                 mem_mentions.append(member)
             assert len(mem_mentions) == 2
 
-            # todo: known bug, see #324
-            # assert len(_r.mention_channels) == 1
+            assert len(_r.mention_channels) == 1
 
             await thread.send(file=r"tests/LordOfPolls.png")
 
