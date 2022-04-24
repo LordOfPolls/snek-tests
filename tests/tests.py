@@ -1,6 +1,6 @@
 import asyncio
-from contextlib import suppress
 import os
+from contextlib import suppress
 from datetime import datetime
 
 import dis_snek
@@ -8,12 +8,10 @@ from dis_snek import (
     MessageContext,
     MessageableMixin,
     ThreadableMixin,
-    ChannelTypes,
     BrandColors,
     Embed,
     Status,
     process_emoji_req_format,
-    Timestamp,
     EmbedFooter,
     SelectOption,
     Modal,
@@ -26,11 +24,11 @@ from dis_snek import (
     EmbedAuthor,
     EmbedAttachment,
     GuildNews,
-    InvitableMixin,
     GuildChannel,
 )
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
+from dis_snek.api.voice.audio import AudioVolume
 
 
 async def append_edit(message: dis_snek.Message, content):
@@ -359,6 +357,50 @@ class Tests(Scale):
             await hook.delete()
         finally:
             await test_channel.delete()
+
+    async def test_voice(self, ctx: MessageContext, msg):
+        test_channel = await ctx.guild.create_voice_channel("_test_voice")
+        test_channel_two = await ctx.guild.create_voice_channel("_test_voice_two")
+
+        try:
+            vc = await test_channel.connect(deafened=True)
+            assert vc == self.bot.get_bot_voice_state(ctx.guild_id)
+
+            audio = AudioVolume("test_audio.mp3")
+
+            vc.play_no_wait(audio)
+            await asyncio.sleep(2)
+
+            assert len(vc.current_audio.buffer) != 0
+            assert vc.player._sent_payloads != 0
+
+            await vc.move(test_channel_two)
+            await asyncio.sleep(2)
+
+            _before = vc.player._sent_payloads
+
+            await test_channel_two.connect(deafened=True)
+
+            await asyncio.sleep(2)
+
+            assert vc.player._sent_payloads != _before
+
+            vc.volume = 1
+            await asyncio.sleep(1)
+            vc.volume = 0.5
+
+            vc.pause()
+            await asyncio.sleep(0.1)
+            assert vc.player.paused
+            vc.resume()
+            await asyncio.sleep(0.1)
+            assert not vc.player.paused
+
+            await vc.disconnect()
+
+        finally:
+            await test_channel.delete()
+            await test_channel_two.delete()
 
 
 def setup(bot):
