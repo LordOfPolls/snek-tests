@@ -400,6 +400,24 @@ class Tests(Scale):
             await test_channel.delete()
             await test_channel_two.delete()
 
+    async def test_emoji(self, ctx: InteractionContext, msg):
+        emoji = None
+        try:
+            emoji = await ctx.guild.create_custom_emoji(
+                "testEmoji", r"tests/LordOfPolls.png"
+            )
+            assert emoji.animated is False
+
+            fetched_emoji = await self.bot.fetch_custom_emoji(emoji.id, ctx.guild_id)
+
+            assert emoji == fetched_emoji
+            assert emoji.animated == fetched_emoji.animated
+            self.ensure_attributes(emoji)
+            self.ensure_attributes(fetched_emoji)
+        finally:
+            if emoji:
+                await emoji.delete()
+
 
 def setup(bot):
     Tests(bot)
