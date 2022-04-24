@@ -55,46 +55,50 @@ class Tests(Scale):
 
         channels.append(dm := await self.bot.owner.fetch_dm())
 
-        for channel in channels:
-            self.ensure_attributes(channel)
+        try:
+            for channel in channels:
+                self.ensure_attributes(channel)
 
-            if isinstance(channel, GuildChannel) and channel != guild_category:
-                await channel.edit(parent_id=guild_category.id)
-                assert channel.category == guild_category
+                if isinstance(channel, GuildChannel) and channel != guild_category:
+                    await channel.edit(parent_id=guild_category.id)
+                    assert channel.category == guild_category
 
-            if isinstance(channel, MessageableMixin):
-                _m = await channel.send("test")
-                assert _m.channel == channel
+                if isinstance(channel, MessageableMixin):
+                    _m = await channel.send("test")
+                    assert _m.channel == channel
 
-                if isinstance(channel, GuildNews):
-                    await _m.publish()
+                    if isinstance(channel, GuildNews):
+                        await _m.publish()
 
-                await _m.delete()
+                    await _m.delete()
 
-            if isinstance(channel, ThreadableMixin):
-                if isinstance(channel, GuildNews):
-                    _tm = await channel.send("dummy message")
-                    thread = await _tm.create_thread("new thread")
-                else:
-                    thread = await channel.create_thread("new thread")
-                assert thread.parent_channel == channel
-                _m = await thread.send("test")
-                assert _m.channel == thread
+                if isinstance(channel, ThreadableMixin):
+                    if isinstance(channel, GuildNews):
+                        _tm = await channel.send("dummy message")
+                        thread = await _tm.create_thread("new thread")
+                    else:
+                        thread = await channel.create_thread("new thread")
+                    assert thread.parent_channel == channel
+                    _m = await thread.send("test")
+                    assert _m.channel == thread
 
-                _m = await channel.send("start thread here")
-                m_thread = await channel.create_thread("new message thread", message=_m)
-                assert _m.id == m_thread.id
+                    _m = await channel.send("start thread here")
+                    m_thread = await channel.create_thread(
+                        "new message thread", message=_m
+                    )
+                    assert _m.id == m_thread.id
 
-                assert m_thread in ctx.guild.threads
-                assert thread in ctx.guild.threads
-                await thread.delete()
-                # We suppress bcu sometimes event fires too fast, before wait_for is called
-                with suppress(asyncio.exceptions.TimeoutError):
-                    await self.bot.wait_for("thread_delete", timeout=2)
-                assert thread not in ctx.guild.threads
-
-        for channel in channels:
-            await channel.delete()
+                    assert m_thread in ctx.guild.threads
+                    assert thread in ctx.guild.threads
+                    await thread.delete()
+                    # We suppress bcu sometimes event fires too fast, before wait_for is called
+                    with suppress(asyncio.exceptions.TimeoutError):
+                        await self.bot.wait_for("thread_delete", timeout=2)
+                    assert thread not in ctx.guild.threads
+        finally:
+            for channel in channels:
+                with suppress(NotFound):
+                    await channel.delete()
 
     async def test_messages(self, ctx: InteractionContext, msg):
         thread = await msg.create_thread("Test Thread")
