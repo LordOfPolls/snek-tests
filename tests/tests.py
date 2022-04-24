@@ -194,7 +194,8 @@ class Tests(Scale):
         finally:
             for role in ctx.guild.roles:
                 if role.name.startswith("_test"):
-                    await role.delete()
+                    with suppress(NotFound):
+                        await role.delete()
 
     async def test_members(self, ctx: InteractionContext, msg):
         for member in [ctx.guild.me, ctx.guild.get_member(os.environ.get("MEMBER"))]:
