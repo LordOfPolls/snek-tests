@@ -5,7 +5,7 @@ from datetime import datetime
 
 import dis_snek
 from dis_snek import (
-    MessageContext,
+    InteractionContext,
     MessageableMixin,
     ThreadableMixin,
     BrandColors,
@@ -29,6 +29,7 @@ from dis_snek import (
 from dis_snek.api.gateway.gateway import WebsocketClient
 from dis_snek.api.http.route import Route
 from dis_snek.api.voice.audio import AudioVolume
+from dis_snek.client.errors import NotFound
 
 
 async def append_edit(message: dis_snek.Message, content):
@@ -42,68 +43,60 @@ class Tests(Scale):
             # ensure all props and attributes load correctly
             getattr(target_object, attr)
 
-    async def test_channels(self, ctx: MessageContext, msg):
-        try:
-            channels = [
-                guild_category := await ctx.guild.create_category("_test_category"),
-                guild_text := await ctx.guild.create_text_channel("_test_text"),
-                guild_news := await ctx.guild.create_news_channel("_test_news"),
-                guild_stage := await ctx.guild.create_stage_channel("_test_stage"),
-                guild_voice := await ctx.guild.create_voice_channel("_test_voice"),
-            ]
-            assert all(c in ctx.guild.channels for c in channels)
+    async def test_channels(self, ctx: InteractionContext, msg):
+        channels = [
+            guild_category := await ctx.guild.create_category("_test_category"),
+            guild_text := await ctx.guild.create_text_channel("_test_text"),
+            guild_news := await ctx.guild.create_news_channel("_test_news"),
+            guild_stage := await ctx.guild.create_stage_channel("_test_stage"),
+            guild_voice := await ctx.guild.create_voice_channel("_test_voice"),
+        ]
+        assert all(c in ctx.guild.channels for c in channels)
 
-            channels.append(dm := await self.bot.owner.fetch_dm())
+        channels.append(dm := await self.bot.owner.fetch_dm())
 
-            for channel in channels:
-                self.ensure_attributes(channel)
+        for channel in channels:
+            self.ensure_attributes(channel)
 
-                if isinstance(channel, GuildChannel) and channel != guild_category:
-                    await channel.edit(parent_id=guild_category.id)
-                    assert channel.category == guild_category
+            if isinstance(channel, GuildChannel) and channel != guild_category:
+                await channel.edit(parent_id=guild_category.id)
+                assert channel.category == guild_category
 
-                if isinstance(channel, MessageableMixin):
-                    _m = await channel.send("test")
-                    assert _m.channel == channel
+            if isinstance(channel, MessageableMixin):
+                _m = await channel.send("test")
+                assert _m.channel == channel
 
-                    if isinstance(channel, GuildNews):
-                        await _m.publish()
+                if isinstance(channel, GuildNews):
+                    await _m.publish()
 
-                    await _m.delete()
+                await _m.delete()
 
-                if isinstance(channel, ThreadableMixin):
-                    if isinstance(channel, GuildNews):
-                        _tm = await channel.send("dummy message")
-                        thread = await _tm.create_thread("new thread")
-                    else:
-                        thread = await channel.create_thread("new thread")
-                    assert thread.parent_channel == channel
-                    _m = await thread.send("test")
-                    assert _m.channel == thread
+            if isinstance(channel, ThreadableMixin):
+                if isinstance(channel, GuildNews):
+                    _tm = await channel.send("dummy message")
+                    thread = await _tm.create_thread("new thread")
+                else:
+                    thread = await channel.create_thread("new thread")
+                assert thread.parent_channel == channel
+                _m = await thread.send("test")
+                assert _m.channel == thread
 
-                    _m = await channel.send("start thread here")
-                    m_thread = await channel.create_thread(
-                        "new message thread", message=_m
-                    )
-                    assert _m.id == m_thread.id
+                _m = await channel.send("start thread here")
+                m_thread = await channel.create_thread("new message thread", message=_m)
+                assert _m.id == m_thread.id
 
-                    assert m_thread in ctx.guild.threads
-                    assert thread in ctx.guild.threads
-                    await thread.delete()
-                    # We suppress bcu sometimes event fires too fast, before wait_for is called
-                    with suppress(asyncio.exceptions.TimeoutError):
-                        await self.bot.wait_for("thread_delete", timeout=2)
-                    assert thread not in ctx.guild.threads
+                assert m_thread in ctx.guild.threads
+                assert thread in ctx.guild.threads
+                await thread.delete()
+                # We suppress bcu sometimes event fires too fast, before wait_for is called
+                with suppress(asyncio.exceptions.TimeoutError):
+                    await self.bot.wait_for("thread_delete", timeout=2)
+                assert thread not in ctx.guild.threads
 
-            for channel in channels:
-                await channel.delete()
+        for channel in channels:
+            await channel.delete()
 
-        finally:
-            for channel in ctx.guild.channels:
-                if channel.name.startswith("_test"):
-                    await channel.delete()
-
-    async def test_messages(self, ctx: MessageContext, msg):
+    async def test_messages(self, ctx: InteractionContext, msg):
         thread = await msg.create_thread("Test Thread")
 
         try:
@@ -166,7 +159,7 @@ class Tests(Scale):
             except dis_snek.errors.NotFound:
                 pass
 
-    async def test_roles(self, ctx: MessageContext, msg):
+    async def test_roles(self, ctx: InteractionContext, msg):
         roles: list[dis_snek.Role] = []
 
         try:
@@ -199,7 +192,7 @@ class Tests(Scale):
                 if role.name.startswith("_test"):
                     await role.delete()
 
-    async def test_members(self, ctx: MessageContext, msg):
+    async def test_members(self, ctx: InteractionContext, msg):
         for member in [ctx.guild.me, ctx.guild.get_member(os.environ.get("MEMBER"))]:
             self.ensure_attributes(member)
 
@@ -217,7 +210,7 @@ class Tests(Scale):
 
             assert member.guild_permissions is not None
 
-    async def test_gateway(self, ctx: MessageContext, msg):
+    async def test_gateway(self, ctx: InteractionContext, msg):
         gateway: WebsocketClient = self.bot._connection_state.gateway
 
         assert gateway._entered
@@ -229,7 +222,7 @@ class Tests(Scale):
         await gateway.send_heartbeat()
         await gateway._acknowledged.wait()
 
-    async def test_ratelimit(self, ctx: MessageContext, msg):
+    async def test_ratelimit(self, ctx: InteractionContext, msg):
         await append_edit(msg, "- Abusing the api... please wait")
         await msg.add_reaction("🤔")
         await msg.remove_reaction("🤔")
@@ -250,7 +243,7 @@ class Tests(Scale):
         await msg.remove_reaction("🤔")
         assert limit.locked
 
-    async def test_embeds(self, ctx: MessageContext, msg):
+    async def test_embeds(self, ctx: InteractionContext, msg):
         thread = await msg.create_thread("Test Thread")
 
         try:
@@ -294,7 +287,7 @@ class Tests(Scale):
             except dis_snek.errors.NotFound:
                 pass
 
-    async def test_components(self, ctx: MessageContext, msg):
+    async def test_components(self, ctx: InteractionContext, msg):
         thread = await msg.create_thread("Test Thread")
 
         try:
@@ -333,7 +326,7 @@ class Tests(Scale):
             except dis_snek.errors.NotFound:
                 pass
 
-    async def test_webhooks(self, ctx: MessageContext, msg):
+    async def test_webhooks(self, ctx: InteractionContext, msg):
         test_channel = await ctx.guild.create_text_channel("_test_webhooks")
         test_thread = await test_channel.create_thread("Test Thread")
 
@@ -358,7 +351,7 @@ class Tests(Scale):
         finally:
             await test_channel.delete()
 
-    async def test_voice(self, ctx: MessageContext, msg):
+    async def test_voice(self, ctx: InteractionContext, msg):
         test_channel = await ctx.guild.create_voice_channel("_test_voice")
         test_channel_two = await ctx.guild.create_voice_channel("_test_voice_two")
 

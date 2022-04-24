@@ -3,6 +3,7 @@ import inspect
 import logging
 import os
 import traceback
+from contextlib import suppress
 from time import perf_counter
 from typing import Callable
 
@@ -11,9 +12,11 @@ from dis_snek import (
     MessageContext,
     Intents,
     listen,
-    CMD_BODY,
+    AutocompleteContext,
 )
+from dis_snek.client.errors import NotFound
 from dotenv import load_dotenv
+from thefuzz import fuzz, process
 
 load_dotenv()
 
@@ -47,7 +50,9 @@ class Bot(dis_snek.Snake):
     async def run_test(self, name: str, method: Callable, ctx: MessageContext):
         test_title = f"{method.__name__.removeprefix('test_')} Tests".title()
 
-        msg = await ctx.send(f"<a:loading:950666903540625418> {test_title}: Running!")
+        msg = await ctx.channel.send(
+            f"<a:loading:950666903540625418> {test_title}: Running!"
+        )
         try:
             await method(ctx, msg)
         except Exception as e:
@@ -56,8 +61,11 @@ class Bot(dis_snek.Snake):
         else:
             await msg.edit(f"✅ {test_title}: Completed")
 
-    @dis_snek.message_command()
-    async def begin(self, ctx: MessageContext, arg: CMD_BODY):
+    @dis_snek.slash_command("begin")
+    @dis_snek.slash_option(
+        "test", description="Run a specific test", opt_type=3, required=False
+    )
+    async def begin(self, ctx: MessageContext, test: str | None = None):
         if not self.available.is_set():
             await ctx.send("Waiting for current tests to complete...")
             await self.available.wait()
@@ -77,14 +85,13 @@ class Bot(dis_snek.Snake):
         tasks = []
         s = perf_counter()
 
-        methods = inspect.getmembers(self.scales["Tests"], inspect.ismethod)
+        methods = inspect.getmembers(self.scales["Tests"], self.filter)
 
         for name, method in methods:
-            if name.startswith("test_"):
-                if arg:
-                    if arg.lower() not in name:
-                        continue
-                tasks.append(asyncio.create_task(self.run_test(name, method, ctx)))
+            if test:
+                if test.lower() not in name:
+                    continue
+            tasks.append(asyncio.create_task(self.run_test(name, method, ctx)))
 
         await asyncio.gather(*tasks)
 
@@ -92,9 +99,35 @@ class Bot(dis_snek.Snake):
 
         await source.edit("✅ Dis_snek Test Suite: Completed")
 
-        await ctx.send(f"Tests completed in {round(dur, 2)} seconds")
+        await ctx.channel.send(f"Tests completed in {round(dur, 2)} seconds")
+
+        for channel in ctx.guild.channels:
+            if channel.name.startswith("_test"):
+                with suppress(NotFound):
+                    await channel.delete()
 
         self.available.set()
+
+    def filter(self, obj) -> bool:
+        if inspect.ismethod(obj):
+            if getattr(obj, "__name__").startswith("test_"):
+                return True
+        return False
+
+    @begin.autocomplete("test")
+    async def test_autocomplete(self, ctx: AutocompleteContext, **_):
+        methods = [i[0] for i in inspect.getmembers(self.scales["Tests"], self.filter)]
+        output = []
+
+        if methods:
+            if ctx.input_text:
+                result = process.extract(
+                    ctx.input_text, methods, scorer=fuzz.partial_token_sort_ratio
+                )
+                output = [t[0] for t in result if t[1] > 50]
+            else:
+                output = list(methods)[:25]
+        await ctx.send(output)
 
 
 Bot().start(os.environ.get("TOKEN"))
